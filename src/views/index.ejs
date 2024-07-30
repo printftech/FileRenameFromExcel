@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload Excel and PDF Directory</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="./script.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload Excel File and Select PDF Directory</h1>
+        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="excelFile">Select Excel File:</label>
+                <input type="file" id="excelFile" name="excelFile" accept=".xlsx" required />
+            </div>
+
+            <div class="form-group">
+                <label for="pdfDirectory">Select PDF Directory:</label>
+                <input type="file" id="pdfDirectory" name="pdfDirectory[]" webkitdirectory directory multiple accept=".pdf" required />
+            </div>
+
+            <button type="submit">Submit</button>
+        </form>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <div class="success-message" id="successMessage">
+            File upload successful! Processing your files...
+        </div>
+        <div class="zip-message" id="zipMessage">
+            Zip file is processing completed...
+        </div>
+        <div class="error-messages" id="errorMessages"></div>
+        <div class="download-button" id="downloadButton">
+            <a href="" id="downloadLink" download>Download Processed Files</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("uploadForm").addEventListener("submit", function (event) {
+            event.preventDefault(); // Prevent the default form submission
+
+            // Show progress container
+            document.getElementById("progressContainer").style.display = "block";
+
+            // Show success message
+            document.getElementById("successMessage").style.display = "block";
+
+            // Hide the submit button and show loading spinner
+            const submitButton = this.querySelector('button[type="submit"]');
+            submitButton.classList.add("hidden");
+
+            const loadingContainer = document.createElement("div");
+            loadingContainer.className = "loading-container";
+            const loadingSpinner = document.createElement("div");
+            loadingSpinner.className = "loading-spinner";
+            loadingContainer.appendChild(loadingSpinner);
+            submitButton.parentNode.appendChild(loadingContainer);
+
+            // Create a FormData object to hold the files
+            const formData = new FormData(this);
+
+            // Create a new XMLHttpRequest object
+            const xhr = new XMLHttpRequest();
+
+            xhr.open("POST", "/upload", true);
+
+            // Update the progress bar based on the upload progress
+            xhr.upload.onprogress = function (event) {
+                if (event.lengthComputable) {
+                    const percentComplete = Math.round((event.loaded / event.total) * 100);
+                    document.getElementById("progressBar").style.width = percentComplete + "%";
+                    document.getElementById("progressBar").innerText = percentComplete + "%";
+                }
+            };
+
+            xhr.onload = function () {
+                // Re-enable the submit button and remove loading spinner
+                submitButton.classList.remove("hidden");
+                loadingContainer.remove();
+
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const result = JSON.parse(xhr.responseText);
+
+                    // Hide progress container
+                    document.getElementById("progressContainer").style.display = "none";
+
+                    // Hide success message and show zip message
+                    document.getElementById("successMessage").style.display = "none";
+                    document.getElementById("zipMessage").style.display = "block";
+
+                    if (result.zipFilePath) {
+                        const zipFilePath = result.zipFilePath; // Use the filename from the response
+                        const downloadLink = document.getElementById("downloadLink");
+                        downloadLink.href = `/download/${zipFilePath}`;
+                        const downloadButton = document.getElementById("downloadButton");
+                        downloadButton.style.display = "block";
+
+                        // Disable the button after it is clicked
+                        downloadLink.addEventListener('click', function () {
+                            downloadButton.style.display = "none";
+                        });
+                    }
+
+                    // Show error messages
+                    if (result.messages && result.messages.length > 0) {
+                        const errorMessagesDiv = document.getElementById("errorMessages");
+                        errorMessagesDiv.innerHTML = formatErrorMessages(result.messages);
+                        errorMessagesDiv.style.display = "block";
+                    }
+                } else {
+                    console.error("Error:", xhr.responseText);
+
+                    // Hide progress container
+                    document.getElementById("progressContainer").style.display = "none";
+                }
+            };
+
+            xhr.onerror = function () {
+                console.error("Error:", xhr.responseText);
+
+                // Re-enable the submit button and remove loading spinner
+                submitButton.classList.remove("hidden");
+                loadingContainer.remove();
+
+                // Hide progress container
+                document.getElementById("progressContainer").style.display = "none";
+            };
+
+            xhr.send(formData);
+        });
+
+        function formatErrorMessages(messages) {
+            console.log("Formatting error messages:", messages); // Debugging line
+            // Define the maximum number of items to display per section
+            const MAX_ITEMS = 10;
+            let formattedMessages = "";
+
+            messages.forEach((message) => {
+                if (message.startsWith("Invalid entry barcode not found in excel.")) {
+                    let ipdNumbers = message
+                        .replace("Invalid entry barcode not found in excel.", "")
+                        .trim();
+                    let ipdChunks = splitIntoChunks(ipdNumbers, MAX_ITEMS);
+                    formattedMessages += `<div>Invalid entry barcode not found in excel.<br>${ipdChunks.join("")}</div><br>`;
+                } else if (message.startsWith("PDF not Found for this IPD No.")) {
+                    let pdfNumbers = message
+                        .replace("PDF not Found for this IPD No.", "")
+                        .trim();
+                    let pdfChunks = splitIntoChunks(pdfNumbers, MAX_ITEMS);
+                    formattedMessages += `<div>PDF not Found for this IPD No.<br>${pdfChunks.join("")}</div><br>`;
+                }
+            });
+
+            console.log("Formatted error messages:", formattedMessages); // Debugging line
+            return formattedMessages;
+        }
+
+        function splitIntoChunks(text, maxItems) {
+            let items = text
+                .split(",")
+                .map((item) => item.trim())
+                .filter((item) => item);
+            let chunks = [];
+
+            for (let i = 0; i < items.length; i += maxItems) {
+                chunks.push(items.slice(i, i + maxItems).join(", "));
+            }
+
+            return chunks;
+        }
+    </script>
+</body>
+</html>
